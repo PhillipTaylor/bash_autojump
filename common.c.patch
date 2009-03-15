@@ -1,0 +1,21 @@
+--- common.c.old	2009-03-09 20:37:36.000000000 +0000
++++ common.c	2009-03-09 20:37:23.000000000 +0000
+@@ -63,6 +63,9 @@
+ #  include "../bashhist.h"
+ #endif
+ 
++#include "autojump.h"
++
++
+ #if !defined (errno)
+ extern int errno;   
+ #endif /* !errno */
+@@ -577,6 +580,8 @@
+ {
+   FREE (the_current_working_directory);
+   the_current_working_directory = savestring (name);
++  /*AJ*/
++  autojump_directory_changed(the_current_working_directory);
+ }
+ 
+ /* **************************************************************** */

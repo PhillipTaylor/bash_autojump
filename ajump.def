@@ -1,0 +1,144 @@
+This file is ajump.def - generates ajump.c.
+This implements the builtins "j" and "jumpstat"
+
+Copyright (c) 2009
+
+You should have received a copy of the GNU General Public License
+along with this file.  If not, see <http://www.gnu.org/licenses/>.
+
+$PRODUCES ajump.c
+#include <config.h>
+
+#if defined (HAVE_UNISTD_H)
+#  ifdef _MINIX
+#    include <sys/types.h>
+#  endif
+#  include <unistd.h>
+#endif
+
+#include "../bashtypes.h"
+#include "posixdir.h"
+#include "posixstat.h"
+#ifndef _MINIX
+#include <sys/param.h>
+#endif
+
+#include <stdio.h>
+
+#include "../bashansi.h"
+#include "../bashintl.h"
+
+#include <errno.h>
+#include <tilde/tilde.h>
+
+#include "../shell.h"
+#include "../flags.h"
+#include "maxpath.h"
+#include "common.h"
+#include "bashgetopt.h"
+
+#include "autojump.h"
+
+#if !defined (errno)
+extern int errno;
+#endif
+
+extern int array_needs_making;
+
+$BUILTIN j
+$FUNCTION j_builtin
+$SHORT_DOC j [criteria]
+Changes the shell working directory to be the one the user
+most likely desires.
+
+The directory the user spends most time is used unless
+CRITERIA is passed in which case the list of recently used
+directories is searched for the best match to CRITERIA.
+
+Exit Status:
+Returns 0 if the directory is changed; non-zero otherwise.
+$END
+
+$BUILTIN jumpstat
+$FUNCTION jumpstat_builtin
+$SHORT_DOC jumpstat [-Y]
+Print the internal scores of autojump available directories.
+
+Options:
+-Y: ???
+
+Exit Status:
+Returns 0
+$END
+
+
+/*
+ * This function is ripped straight from cd.def.
+ * Not ideal, but it gets us up and running.
+ */
+static void
+setpwd (dirname)
+     char *dirname;
+{
+  int old_anm;
+  SHELL_VAR *tvar;
+
+  old_anm = array_needs_making;
+  tvar = bind_variable ("PWD", dirname ? dirname : "", 0);
+  if (old_anm == 0 && array_needs_making && exported_p (tvar))
+    {
+      update_export_env_inplace ("PWD=", 4, dirname ? dirname : "");
+      array_needs_making = 0;
+    }
+}
+
+int
+j_builtin(list)
+    WORD_LIST *list;
+{
+  char *criterion = (char *)NULL;
+  char *dirname;
+
+  if(list)
+  {
+    criterion = list->word->word;
+  }
+
+  dirname = autojump_jump(criterion);
+
+  if(dirname)
+  {
+    if(chdir(dirname) == 0)
+    {
+      set_working_directory(dirname);
+      setpwd(dirname);
+      return 0;
+    }
+    return -1;
+  }
+
+  /*
+    error or success if jump() doesn't 
+    give us anything??
+  */
+  return 0;
+}
+
+int
+jumpstat_builtin(list)
+    WORD_LIST *list;
+{
+  int opt;
+  reset_internal_getopt();
+  while( (opt = internal_getopt(list, "Y")) != -1 )
+  {
+    switch(opt)
+    {
+      default:
+      ;
+    }
+  }
+  list = loptend;
+
+  return autojump_jumpstat();
+}
