@@ -275,218 +275,196 @@ void autojump_jumpstat()
   printf("Total: %d\n", total);
 }
 
+int lock_file(FILE *f_handle);
+int unlock_file(FILE *f_handle);
+
+int load_file(FILE *f_handle, struct dirspec **merge_array);
+void merge_into_jumprecs(struct dirspec **merge_array);
+void write_file(FILE *f_handle);
+
 void sync_to_file()
 {
-  struct flock fl;       //used to lock the file
-  FILE *f_handle;
   int now;
-  int i;
-
-  int read_error = 0;   //used to denote parsing errors
+  char *temp;
   char filename[512];
-  int found;
-  char *buffer;
-  char *delim_one, *delim_two;
-  int total_time, last_accessed;
-  int sz;
-  char *path;
+  int read_failed = 0;
+  struct dirspec **merge_array;
+  FILE *f_handle;
 
-  //this is the array we use for merging our data
-  struct dirspec *merge_array[AUTOJUMP_DIR_SIZE * 2];
-  int pos = 0;
-
-  //first step is the check we actually need
-  //to sync.
+  //step one, check we need to actually sync
   now = time(NULL);
 
   if ((now - last_sync) < AUTOJUMP_SYNC_TIME_SECONDS)
+  {
+    printf("no need to sync\n");
     return;
+  }
 
-  //initialise merge_array
-  for (i = 0; i < AUTOJUMP_DIR_SIZE * 2; i++)
-	merge_array[pos] = 0;
+  printf("time to sync\n");
 
-  //attempt to get a file lock
-  fl.l_type   = F_WRLCK;
-  fl.l_whence = SEEK_SET;
-  fl.l_start  = 0;
-  fl.l_len    = 0;
-  fl.l_pid    = getpid();
-
-  buffer = getenv("HOME");
-  strcpy(filename, buffer);
+  temp = getenv("HOME");
+  strcpy(filename, temp);
   strcat(filename, AUTOJUMP_FILENAME);
 
   //open for reading and writing
   f_handle = fopen(filename, "r+");
   if (f_handle == NULL)
   {
-    //not critical. we can still write to the file
-    if (fopen(filename, "w") == NULL)
+    printf("failed to open file\n");
+    read_failed = 1;
+  }
+  else
+  {
+    if (lock_file(f_handle) == -1)
     {
-      printf("warning: can't read or write to %s\nNo persistence\n", filename);
-      return;
+      printf("failed to lock file\nPresume locked by someone else, will try again later\n");
+      srand(time(NULL));
+      last_sync += (rand() % 10);
+      fclose(f_handle);
+      return; 
     }
     else
-      read_error = 1;
-  }
-
-  //we use file locks to ensure we don't mash the
-  //file when different shells merge their arrays
-  //together.
-  if (fcntl(fileno(f_handle), F_SETLK, &fl) == -1)
-  {
-    //if the file is locked, set a sync for a
-    //random time into the future to try and
-    //minimise collisions.
-    srand(time(NULL));
-
-    last_sync += (rand() % 10);
-
-    if (read_error == 0)
+    {
+      printf("lock success. begin read\n");
+      if (load_file(f_handle, merge_array) == -1)
+      {
+        //load failed. :-(
+        printf("load failed\n");
+      }
+      else
+      {
+        //load okay!
+        printf("load okay\n");
+        merge_into_jumprecs(merge_array);
+      }
+      write_file(f_handle);
+      release_lock(f_handle);
       fclose(f_handle);
-      return;
+    }
   }
-  
+
+}
+
+int lock_file(FILE *f_handle)
+{
+  struct flock fl;
+
+  fl.l_type   = F_WRLCK;
+  fl.l_whence = SEEK_SET;
+  fl.l_start  = 0;
+  fl.l_len    = 0;
+  fl.l_pid    = getpid();
+
+  return fcntl(fileno(f_handle), F_SETLK, &fl);
+}
+
+int unlock_file(FILE *f_handle)
+{
+  struct flock fl;
+
+  fl.l_type   = F_UNLCK;
+  fl.l_whence = SEEK_SET;
+  fl.l_start  = 0;
+  fl.l_len    = 0;
+  fl.l_pid    = getpid();
+
+  return fcntl(fileno(f_handle), F_SETLK, &fl);
+}
+
+int load_file(FILE *f_handle, struct dirspec **merge_array)
+{
+  char *buffer;
+  unsigned int total_time = 0;
+  unsigned int last_accessed = 0;
+  char *temp;
+  int lines_read = 0;
+  int read_error = 0;
+  int next_free = 0;
+  struct dirspec *rec;
+  char *delim_one, *delim_two;
+  int i;
+
+  //prepare the merge_array (allocating pointers, not objects)
+  merge_array = (struct dirspec**) malloc(sizeof(struct dirspec*) * (AUTOJUMP_DIR_SIZE * 2));
+
   buffer = (char*) malloc (sizeof(char) * MAX_LINE_SIZE);
+  printf("value of f_handle: %p\n", f_handle);
 
-  if (read_error == 0)
+  while (fgets(buffer, MAX_LINE_SIZE - 1, f_handle) != NULL && read_error == 0)
   {
-    while (fgets(buffer, MAX_LINE_SIZE - 1, f_handle) == buffer && read_error == 0)
+    *(buffer + (strlen(buffer) - 1)) = '\0';
+    printf("read: %s\n", buffer);
+
+    //parse out the time.
+    delim_one = strstr(buffer, ":");
+    if (delim_one == NULL)
     {
-      *(buffer + (strlen(buffer) - 1)) = '\0';
-  
-      //parse out the time.
-      delim_one = strstr(buffer, ":");
-      if (delim_one == NULL)
-      {
-        read_error = 1;
-        break;
-      }
-
-      //parse out the last_accessed value
-      delim_two = strstr(delim_one + 1, ":");
-      if (delim_two == NULL)
-      {
-        read_error = 1;
-        break;
-      }
- 
-      errno = 0;
-      total_time = strtol(buffer, &delim_one, 10);
-      last_accessed = strtol(delim_one + 1, &delim_two, 10);
-      printf("errno: %d\n", errno);
-      if (errno != 0)
-      {
-        read_error = 1;
-        break;
-      }
-  
-      //rest of variable is path
-      sz = strlen(delim_two);
-      path = (char*) malloc (sizeof(char) * sz);
-      strcpy(path, delim_two + 1);
-  
-      printf("path (%d): %s\n (time %d, last: %d)\n", strlen(path), path, total_time, last_accessed);
-  
-      merge_array[pos] = (struct dirspec*) malloc (sizeof(struct dirspec));
-      merge_array[pos]->path = path;
-      merge_array[pos]->time = total_time;
-      merge_array[pos]->last_accessed = last_accessed;
-      pos++;
-  
+      read_error = 1;
+      break;
     }
-  
-    free(buffer);
 
-    if (read_error == 0)
+    //parse out the last_accessed value
+    delim_two = strstr(delim_one + 1, ":");
+    if (delim_two == NULL)
     {
-      //now merge our own data into the array.
-      for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
-      {
-    
-        if (jumprecs[i] == NULL)
-          break;
-    
-        found = 0;
-    
-        for (pos = 0; (pos < (AUTOJUMP_DIR_SIZE * 2)) && found == 0; pos++)
-        {
-          if (merge_array[pos] == NULL)
-          {
-             merge_array[pos] = jumprecs[i];
-             found = 1;
-             printf("break...\n");
-             break;
-          }
-          else
-          {
-              printf("%d: %s AGAINST %d: %s\n", i, jumprecs[i]->path, pos, merge_array[pos]->path);
-    	      if (strcmp(jumprecs[i]->path, merge_array[pos]->path) == 0)
-    	      {
-    		 if (jumprecs[i]->time < merge_array[pos]->time)
-    		    jumprecs[i]->time = merge_array[pos]->time;
-    		 if (jumprecs[i]->last_accessed < merge_array[pos]->last_accessed)
-    		    jumprecs[i]->last_accessed = merge_array[pos]->last_accessed;
-    		 found = 1;
-    	      }
-          }
-        }
-      }
-    
-      //merge array contains all records we care about. take the 40 best records back!
-      //todo: move current_directory across first for safety reasons?
-      pos = 0;
-    
-      while (pos < AUTOJUMP_DIR_SIZE)
-      {
-        found = get_best_score(merge_array, (AUTOJUMP_DIR_SIZE * 2));
-    
-        if (found == -1)
-          break;
-        else
-        {
-          jumprecs[pos++] = merge_array[found];
-          merge_array[found] = NULL;
-        }
-      }
-
-      //free memory used during load.
-      for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
-      {
-        if (jumprecs[i] != NULL)
-        {
-          if (jumprecs[i]->path != NULL)
-            free(jumprecs[i]->path);
-          free(jumprecs[i]);
-        }
-      }
+      read_error = 1;
+      break;
     }
+
+    errno = 0;
+    total_time = strtol(buffer, &delim_one, 10);
+    last_accessed = strtol(delim_one + 1, &delim_two, 10);
+    printf("errno: %d\n", errno);
+    if (errno != 0)
+    {
+      read_error = 1;
+      break;
+    }
+
+    //losing first char of delim_two so don't need to allocate extra for \0
+    temp = (char*) malloc(sizeof(char) * strlen(delim_two));
+    strcpy(temp, delim_two + 1);
+
+    //read a whole line succesfully, add it to the array
+    rec = (struct dirspec*) (merge_array + next_free);
+    rec = (struct dirspec*) malloc (sizeof(struct dirspec));
+    rec->path = temp;
+    rec->time = total_time;
+    rec->last_accessed = last_accessed;
+
+    next_free++;
+
   }
+
+  //set remaining values to NULL
+  while (next_free < (AUTOJUMP_DIR_SIZE * 2))
+  {
+    *(merge_array + next_free) = NULL;
+   next_free++;
+  }
+
+  free(buffer);
 
   if (read_error == 1)
-    printf("read error occured during sync_to_file\n");
-
-  //go back to the beginning of the file
-  //and write the new contents out.
-  fseek(f_handle, 0, SEEK_SET);
-
-  for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
   {
-    if (jumprecs[i] != NULL)
-    {
-      printf("%d:%d:%s\n", jumprecs[i]->time, jumprecs[i]->last_accessed, jumprecs[i]->path);
-      fprintf(f_handle, "%d:%d:%s\n", jumprecs[i]->time, jumprecs[i]->last_accessed, jumprecs[i]->path);
-    }
+    printf("read error. aborting all data read\n");
+    return -1;
+  }
+  else
+  {
+    printf("processed %d lines\n", next_free);
+    return 0;
   }
 
-  fclose(f_handle);
+}
 
-  //unlock file
-  fl.l_type   = F_WRLCK;
-  fcntl(fileno(f_handle), F_SETLK, &fl);
-  
-  last_sync = now;
+void merge_into_jumprecs(struct dirspec **merge_array)
+{
+   ...continue here...
+}
+
+void write_file(FILE *f_handle)
+{
 }
 
 void autojump_exit()
