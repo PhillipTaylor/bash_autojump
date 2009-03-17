@@ -106,6 +106,8 @@ j_builtin(list)
 
   dirname = autojump_jump(criterion);
 
+  printf("retval...\n");
+
   if(dirname)
   {
     if(chdir(dirname) == 0)
@@ -140,5 +142,5 @@ jumpstat_builtin(list)
   }
   list = loptend;
 
-  return autojump_jumpstat();
+  autojump_jumpstat();
 }

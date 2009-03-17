@@ -228,18 +228,14 @@ char *autojump_jump(char *criteria)
          //best score.
          if (strstr(jumprecs[i]->path, criteria) != NULL)
          {
-           printf("potential match %s\n", jumprecs[i]->path);
            if (best_match == -1)
               best_match = i;
            else
            {
               if (get_score(i) > get_score(best_match))
               {
-                printf("new best match %s", jumprecs[i]->path);
                 best_match = i;
               }
-              else
-                printf("didn't outmatch best time\n");
            }
          }
        }
@@ -247,9 +243,15 @@ char *autojump_jump(char *criteria)
   }
 
   if (best_match == -1)
+  {
+    printf("no matches.\n");
     return NULL;
+  }
   else
+  {
+    printf("%s\n", jumprecs[best_match]->path);
     return jumprecs[best_match]->path;
+  }
 }
 
 void autojump_jumpstat()
@@ -299,6 +301,10 @@ void sync_to_file()
 
   if ((now - last_sync) < AUTOJUMP_SYNC_TIME_SECONDS)
     return;
+
+  //initialise merge_array
+  for (i = 0; i < AUTOJUMP_DIR_SIZE * 2; i++)
+	merge_array[pos] = 0;
 
   //attempt to get a file lock
   fl.l_type   = F_WRLCK;
@@ -457,6 +463,9 @@ void sync_to_file()
       }
     }
   }
+
+  if (read_error == 1)
+    printf("read error occured during sync_to_file\n");
 
   //go back to the beginning of the file
   //and write the new contents out.
