@@ -1,22 +1,16 @@
 
 -- PROJECT STATUS --
 
-This code isn't quite working yet. We suggest you either of these working versions:
+This code isn't quite working yet. We suggest you look for other implementations in the meantime.
 
-- The original version (written in Python) by JoelTheLion
-
-
-A version which is written purely as a BASH script:
+Original Python implementation: http://github.com/joelthelion/autojump/tree/master
+Later BASH script implementation: http://github.com/KenMacD/autojump/tree/master
 
 -- INTRO --
 
 bash_autojump is an implementation of the autojump functionality but written as a patch that can be applied to the BASH 4.0 source code. Below is the original README which describes all of the features.
 
 This specific reimplementation was written by Dan Kendall and Phillip Taylor.
-
--- LICENSE --
-
-This source code is under the GNU GPL version 2, to match the license of the BASH source code itself.
 
 ========
 AUTOJUMP
