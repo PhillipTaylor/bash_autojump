@@ -48,10 +48,17 @@ struct dirspec *jumprecs[AUTOJUMP_DIR_SIZE];
 //terminals don't trample on each other's records.
 void sync_to_file();
 
+//these functions are all used by sync_to_file
+int lock_file(FILE *f_handle);
+int unlock_file(FILE *f_handle);
+int load_file(FILE *f_handle, struct dirspec **merge_array);
+void merge_into_jumprecs(struct dirspec **merge_array);
+void write_file(FILE *f_handle);
+
 //these functions are used in the scoring system to
 //choose the best match for a record or the lowest
 //match when we want to eliminate unused directories.
-unsigned int get_score(int i);
+unsigned int get_score(struct dirspec *array[], int i);
 int get_best_score(struct dirspec *array[], int size);
 
 //last criteria passed into jump() so running "j" performs
@@ -91,7 +98,9 @@ int get_best_score(struct dirspec *array[], int size)
   {
     if (array[i] != NULL)
     {
-      if (get_score(i) > get_score(best))
+      if (best == -1)
+        best = i;
+      else if (get_score(array, i) > get_score(array, best))
         best = i;
     }
   }
@@ -172,7 +181,8 @@ void autojump_directory_changed(char *new_path)
     for (i = 1; i < AUTOJUMP_DIR_SIZE; i++)
     {
       //extra test to make sure we aren't removing the current directory.
-      if (get_score(lowest_scoring_item) > get_score(i) && strcmp(jumprecs[i]->path, current_directory) != 0)
+      if (get_score(jumprecs, lowest_scoring_item) > get_score(jumprecs, i)
+		&& strcmp(jumprecs[i]->path, current_directory) != 0)
         lowest_scoring_item = i;
     }
 
@@ -186,15 +196,15 @@ void autojump_directory_changed(char *new_path)
 
 }
 
-unsigned int get_score(int i)
+unsigned int get_score(struct dirspec *array[], int i)
 {
-  if (jumprecs[i] == NULL)
+  if (array[i] == NULL)
     return -1;
 
   //scale last_accessed down to "days". we don't someone to
   //go on holiday for a week to find out that new directories
   //crush old directories in last_accessed scores.
-  return ((jumprecs[i]->last_accessed % 3600 % 24 % 365) + (jumprecs[i]->time % 120));
+  return ((array[i]->last_accessed % 3600 % 24 % 365) + (array[i]->time % 120));
 
 }
 
@@ -232,7 +242,7 @@ char *autojump_jump(char *criteria)
               best_match = i;
            else
            {
-              if (get_score(i) > get_score(best_match))
+              if (get_score(jumprecs, i) > get_score(jumprecs, best_match))
               {
                 best_match = i;
               }
@@ -266,7 +276,7 @@ void autojump_jumpstat()
   {
     if (jumprecs[i] != NULL)
     {
-      score = get_score(i);
+      score = get_score(jumprecs, i);
       printf("score: %d\t: %s\n", score, jumprecs[i]->path);
       total += score;
     }
@@ -275,17 +285,12 @@ void autojump_jumpstat()
   printf("Total: %d\n", total);
 }
 
-int lock_file(FILE *f_handle);
-int unlock_file(FILE *f_handle);
-
-int load_file(FILE *f_handle, struct dirspec **merge_array);
-void merge_into_jumprecs(struct dirspec **merge_array);
-void write_file(FILE *f_handle);
 
 void sync_to_file()
 {
   int now;
   char *temp;
+  int i;
   char filename[512];
   int read_failed = 0;
   struct dirspec **merge_array;
@@ -325,6 +330,14 @@ void sync_to_file()
     }
     else
     {
+
+      //prepare the merge_array (allocating pointers, not objects)
+      merge_array = (struct dirspec**) malloc(sizeof(struct dirspec*) * (AUTOJUMP_DIR_SIZE * 2));
+      for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
+      {
+         merge_array[i] = NULL;
+      }
+
       printf("lock success. begin read\n");
       if (load_file(f_handle, merge_array) == -1)
       {
@@ -334,12 +347,14 @@ void sync_to_file()
       else
       {
         //load okay!
-        printf("load okay\n");
+        printf("load okay\nmerging...\n");
         merge_into_jumprecs(merge_array);
       }
       write_file(f_handle);
-      release_lock(f_handle);
+      printf("writing file...\n");
+      unlock_file(f_handle);
       fclose(f_handle);
+      printf("sync done\n");
     }
   }
 
@@ -384,8 +399,6 @@ int load_file(FILE *f_handle, struct dirspec **merge_array)
   char *delim_one, *delim_two;
   int i;
 
-  //prepare the merge_array (allocating pointers, not objects)
-  merge_array = (struct dirspec**) malloc(sizeof(struct dirspec*) * (AUTOJUMP_DIR_SIZE * 2));
 
   buffer = (char*) malloc (sizeof(char) * MAX_LINE_SIZE);
   printf("value of f_handle: %p\n", f_handle);
@@ -460,11 +473,93 @@ int load_file(FILE *f_handle, struct dirspec **merge_array)
 
 void merge_into_jumprecs(struct dirspec **merge_array)
 {
-   ...continue here...
+  int i, put;
+
+   //step 1, take data from jumprecs to merge array
+  for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
+  {
+
+    if (jumprecs[i] != NULL)
+    {
+      put = find_match(merge_array, jumprecs[i]->path);
+      if (merge_array[put] != NULL)
+      {
+	//merge records
+        if (merge_array[put]->time < jumprecs[i]->time)
+          merge_array[put]->time = jumprecs[i]->time;
+
+        if (merge_array[put]->last_accessed < jumprecs[i]->last_accessed)
+          merge_array[put]->last_accessed = jumprecs[i]->last_accessed;
+
+        jumprecs[i] = NULL;
+      }
+      else
+      { //move entry to free space.
+
+        merge_array[put] = jumprecs[i];
+	jumprecs[i] = NULL;
+
+      }
+    }
+  }
+
+  //step 2, limited positions up for grabs!
+  for (i = 0; i < (AUTOJUMP_DIR_SIZE); i++)
+  {
+    i = get_best_score(merge_array, (AUTOJUMP_DIR_SIZE * 2));
+    if (i == -1)
+      break;
+    else
+    {
+      jumprecs[i] = merge_array[i];
+      merge_array[i] = NULL;
+    }
+  }
+
+  //step 3, the losers get deleted.
+  for (i = 0; i < (AUTOJUMP_DIR_SIZE * 2); i++)
+  {
+    if (merge_array[i] != NULL)
+    {
+       free(merge_array[i]->path);
+       free(merge_array[i]);
+    }
+  }
+
+}
+
+int find_match(struct dirspec **merge_array, char *path)
+{
+  int i;
+
+  for (i = 0; i < (AUTOJUMP_DIR_SIZE * 2); i++)
+  {
+
+    if (merge_array[i] != NULL)
+    {
+      if (strcmp(merge_array[i]->path, path) == 0)
+         return i;
+      else
+        printf("%s != %s\n", merge_array[i]->path, path);
+    }
+    else
+      return i;
+  }
 }
 
 void write_file(FILE *f_handle)
 {
+
+  int i;
+
+  for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
+  {
+    if (jumprecs[i] != NULL)
+    {
+       fprintf(f_handle, "%i:%i:%s\n", jumprecs[i]->time, jumprecs[i]->last_accessed, jumprecs[i]->path);
+    }
+  }
+
 }
 
 void autojump_exit()
