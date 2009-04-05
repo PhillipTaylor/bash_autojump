@@ -300,12 +300,7 @@ void sync_to_file()
   now = time(NULL);
 
   if ((now - last_sync) < AUTOJUMP_SYNC_TIME_SECONDS)
-  {
-    printf("no need to sync\n");
     return;
-  }
-
-  printf("time to sync\n");
 
   temp = getenv("HOME");
   strcpy(filename, temp);
@@ -314,15 +309,11 @@ void sync_to_file()
   //open for reading and writing
   f_handle = fopen(filename, "r+");
   if (f_handle == NULL)
-  {
-    printf("failed to open file\n");
     read_failed = 1;
-  }
   else
   {
     if (lock_file(f_handle) == -1)
     {
-      printf("failed to lock file\nPresume locked by someone else, will try again later\n");
       srand(time(NULL));
       last_sync += (rand() % 10);
       fclose(f_handle);
@@ -333,28 +324,23 @@ void sync_to_file()
 
       //prepare the merge_array (allocating pointers, not objects)
       merge_array = (struct dirspec**) malloc(sizeof(struct dirspec*) * (AUTOJUMP_DIR_SIZE * 2));
-      for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
-      {
-         merge_array[i] = NULL;
-      }
 
-      printf("lock success. begin read\n");
+      for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
+         merge_array[i] = NULL;
+
       if (load_file(f_handle, merge_array) == -1)
       {
         //load failed. :-(
-        printf("load failed\n");
       }
       else
       {
         //load okay!
-        printf("load okay\nmerging...\n");
         merge_into_jumprecs(merge_array);
       }
+
       write_file(f_handle);
-      printf("writing file...\n");
       unlock_file(f_handle);
       fclose(f_handle);
-      printf("sync done\n");
     }
   }
 
@@ -551,6 +537,7 @@ void write_file(FILE *f_handle)
 {
 
   int i;
+  fseek(f_handle, 0, SEEK_SET);
 
   for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
   {
