@@ -76,6 +76,7 @@ $END
 #include "maxpath.h"
 #include "common.h"
 #include "builtext.h"
+#include <stdio.h>
 
 #ifdef LOADABLE_BUILTIN
 #  include "builtins.h"
@@ -96,16 +97,19 @@ j_builtin (list)
      WORD_LIST *list;
 {
   char *switch_to;
+  char *temp;
 
   switch_to = autojump_jump(list->word->word);
 
   if (switch_to != NULL)
   {
     cd_to_string(switch_to);
-    return EXECUTION_SUCCESS;
+    printf("\e[0;34m%s\e[0m\n", switch_to);
+    return (sh_chkwrite (EXECUTION_SUCCESS));
   }
 
-  return EXECUTION_FAILURE;
+  printf("\e[0;34mNo Matches\e[0m\n");
+  return (sh_chkwrite (EXECUTION_FAILURE));
 }
 
 int

@@ -253,15 +253,9 @@ char *autojump_jump(char *criteria)
   }
 
   if (best_match == -1)
-  {
-    printf("no matches.\n");
     return NULL;
-  }
   else
-  {
-    printf("%s\n", jumprecs[best_match]->path);
     return jumprecs[best_match]->path;
-  }
 }
 
 void autojump_jumpstat()
