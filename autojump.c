@@ -270,6 +270,8 @@ void autojump_jumpstat()
   unsigned int score;
   unsigned int total = 0;
 
+  printf("scores:\n");
+
   sync_to_file();
 
   for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)

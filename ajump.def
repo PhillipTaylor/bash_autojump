@@ -1,13 +1,60 @@
-This file is ajump.def - generates ajump.c.
-This implements the builtins "j" and "jumpstat"
+This file is ajump.def, from which is created ajump.c.  It implements the
+builtins "j", "jumpstat" in Bash.
 
-Copyright (c) 2009
+Copyright (C) 1987-2009 Free Software Foundation, Inc.
+
+This file is an optional patch for GNU Bash, the Bourne Again SHell.
+Written by Phillip Taylor and Dan Kendall
+
+Bash is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Bash is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with this file.  If not, see <http://www.gnu.org/licenses/>.
+along with Bash.  If not, see <http://www.gnu.org/licenses/>.
 
 $PRODUCES ajump.c
+
+$BUILTIN j
+$FUNCTION j_builtin
+$SHORT_DOC j [dir spec]
+Jumps to a directory matching dir spec
+
+Given a parameter the code will search its internal list
+or recent and frequently used directories, select the most
+probably one and cd to it.
+
+Arguments:
+  dirspec	The directory you want to go to. Does not have to
+		be the full name of the directory.
+
+Exit Status:
+Returns success unless an match isnt found or the directory change fails.
+$END
+
+$BUILTIN jumpstat
+$FUNCTION jumpstat_builtin
+$SHORT_DOC jumpstat
+Shows the scores of the autojumps tracked directories
+
+Prints autojumps internal list of directories.
+
+Exit Status:
+Always success.
+$END
+
 #include <config.h>
+
+#include <stdio.h>
+#ifndef _MINIX
+#  include <sys/param.h>
+#endif
 
 #if defined (HAVE_UNISTD_H)
 #  ifdef _MINIX
@@ -16,131 +63,92 @@ $PRODUCES ajump.c
 #  include <unistd.h>
 #endif
 
-#include "../bashtypes.h"
-#include "posixdir.h"
-#include "posixstat.h"
-#ifndef _MINIX
-#include <sys/param.h>
-#endif
-
-#include <stdio.h>
-
 #include "../bashansi.h"
 #include "../bashintl.h"
+
+//this module does all the real work.
+#include "autojump.h"
 
 #include <errno.h>
 #include <tilde/tilde.h>
 
 #include "../shell.h"
-#include "../flags.h"
 #include "maxpath.h"
 #include "common.h"
-#include "bashgetopt.h"
+#include "builtext.h"
 
-#include "autojump.h"
+#ifdef LOADABLE_BUILTIN
+#  include "builtins.h"
+#endif
 
 #if !defined (errno)
 extern int errno;
-#endif
+#endif /* !errno */
 
-extern int array_needs_making;
+static int initialised = 0;
 
-$BUILTIN j
-$FUNCTION j_builtin
-$SHORT_DOC j [criteria]
-Changes the shell working directory to be the one the user
-most likely desires.
+static int cd_to_string __P((char *));
+void directory_changed(char *new_directory);
+void ajump_exit();
 
-The directory the user spends most time is used unless
-CRITERIA is passed in which case the list of recently used
-directories is searched for the best match to CRITERIA.
-
-Exit Status:
-Returns 0 if the directory is changed; non-zero otherwise.
-$END
-
-$BUILTIN jumpstat
-$FUNCTION jumpstat_builtin
-$SHORT_DOC jumpstat [-Y]
-Print the internal scores of autojump available directories.
-
-Options:
--Y: ???
-
-Exit Status:
-Returns 0
-$END
-
-
-/*
- * This function is ripped straight from cd.def.
- * Not ideal, but it gets us up and running.
- */
-static void
-setpwd (dirname)
-     char *dirname;
+int
+j_builtin (list)
+     WORD_LIST *list;
 {
-  int old_anm;
-  SHELL_VAR *tvar;
+  char *switch_to;
 
-  old_anm = array_needs_making;
-  tvar = bind_variable ("PWD", dirname ? dirname : "", 0);
-  if (old_anm == 0 && array_needs_making && exported_p (tvar))
-    {
-      update_export_env_inplace ("PWD=", 4, dirname ? dirname : "");
-      array_needs_making = 0;
-    }
+  switch_to = autojump_jump(list->word->word);
+
+  if (switch_to != NULL)
+  {
+    cd_to_string(switch_to);
+    return EXECUTION_SUCCESS;
+  }
+
+  return EXECUTION_FAILURE;
 }
 
 int
-j_builtin(list)
-    WORD_LIST *list;
+jumpstat_builtin (list)
+     WORD_LIST *list;
 {
-  char *criterion = (char *)NULL;
-  char *dirname;
-
-  if(list)
-  {
-    criterion = list->word->word;
-  }
-
-  dirname = autojump_jump(criterion);
-
-  printf("retval...\n");
-
-  if(dirname)
-  {
-    if(chdir(dirname) == 0)
-    {
-      set_working_directory(dirname);
-      setpwd(dirname);
-      return 0;
-    }
-    return -1;
-  }
-
-  /*
-    error or success if jump() doesn't 
-    give us anything??
-  */
-  return 0;
-}
-
-int
-jumpstat_builtin(list)
-    WORD_LIST *list;
-{
-  int opt;
-  reset_internal_getopt();
-  while( (opt = internal_getopt(list, "Y")) != -1 )
-  {
-    switch(opt)
-    {
-      default:
-      ;
-    }
-  }
-  list = loptend;
-
   autojump_jumpstat();
+  return EXECUTION_SUCCESS;
 }
+
+void
+directory_changed(char *new_directory)
+{
+  if (initialised == 0)
+  {
+    autojump_init();
+    initialised = 1;
+  }
+  autojump_directory_changed(new_directory);
+}
+
+void
+ajump_exit()
+{
+  autojump_exit();
+}
+
+/* Switch to the directory in NAME.  This uses the cd_builtin to do the work,
+   so if the result is EXECUTION_FAILURE then an error message has already
+   been printed. */
+
+static int
+cd_to_string (name)
+     char *name;
+{
+  WORD_LIST *tlist;
+  WORD_LIST *dir;
+  int result;
+
+  dir = make_word_list (make_word (name), NULL);
+  tlist = make_word_list (make_word ("--"), dir);
+  result = cd_builtin (tlist);
+  dispose_words (tlist);
+  return (result);
+}
+
