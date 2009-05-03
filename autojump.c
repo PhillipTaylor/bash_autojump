@@ -264,9 +264,9 @@ void autojump_jumpstat()
   unsigned int score;
   unsigned int total = 0;
 
-  printf("scores:\n");
-
   sync_to_file();
+
+  printf("scores:\n");
 
   for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
   {
@@ -281,6 +281,12 @@ void autojump_jumpstat()
   printf("Total: %d\n", total);
 }
 
+/*
+ * read_failed reason:
+ * 1: fopen failed
+ * 2: bad deliminator - wax file
+ * 3: strtol fail - wax file
+*/
 
 void sync_to_file()
 {
@@ -303,7 +309,7 @@ void sync_to_file()
   strcat(filename, AUTOJUMP_FILENAME);
 
   //open for reading and writing
-  f_handle = fopen(filename, "r+");
+  f_handle = fopen(filename, "r");
   if (f_handle == NULL)
     read_failed = 1;
   else
@@ -324,19 +330,14 @@ void sync_to_file()
       for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
          merge_array[i] = NULL;
 
-      if (load_file(f_handle, merge_array) == -1)
-      {
-        //load failed. :-(
-      }
-      else
-      {
-        //load okay!
+      i = load_file(f_handle, merge_array);
+      if (i == 0)
         merge_into_jumprecs(merge_array);
-      }
 
+      fclose(f_handle);
+      f_handle = fopen(filename, "w");
       write_file(f_handle);
       unlock_file(f_handle);
-      fclose(f_handle);
     }
   }
 
@@ -383,18 +384,16 @@ int load_file(FILE *f_handle, struct dirspec **merge_array)
 
 
   buffer = (char*) malloc (sizeof(char) * MAX_LINE_SIZE);
-  printf("value of f_handle: %p\n", f_handle);
 
   while (fgets(buffer, MAX_LINE_SIZE - 1, f_handle) != NULL && read_error == 0)
   {
     *(buffer + (strlen(buffer) - 1)) = '\0';
-    printf("read: %s\n", buffer);
 
     //parse out the time.
     delim_one = strstr(buffer, ":");
     if (delim_one == NULL)
     {
-      read_error = 1;
+      read_error = 2;
       break;
     }
 
@@ -402,17 +401,16 @@ int load_file(FILE *f_handle, struct dirspec **merge_array)
     delim_two = strstr(delim_one + 1, ":");
     if (delim_two == NULL)
     {
-      read_error = 1;
+      read_error = 2;
       break;
     }
 
     errno = 0;
     total_time = strtol(buffer, &delim_one, 10);
     last_accessed = strtol(delim_one + 1, &delim_two, 10);
-    printf("errno: %d\n", errno);
     if (errno != 0)
     {
-      read_error = 1;
+      read_error = 3;
       break;
     }
 
@@ -426,6 +424,7 @@ int load_file(FILE *f_handle, struct dirspec **merge_array)
     rec->path = temp;
     rec->time = total_time;
     rec->last_accessed = last_accessed;
+    printf("%d, %d, %s\n", rec->time, rec->last_accessed, rec->path);
 
     next_free++;
 
@@ -440,17 +439,10 @@ int load_file(FILE *f_handle, struct dirspec **merge_array)
 
   free(buffer);
 
-  if (read_error == 1)
-  {
-    printf("read error. aborting all data read\n");
-    return -1;
-  }
-  else
-  {
-    printf("processed %d lines\n", next_free);
-    return 0;
-  }
+  if (read_error != 0)
+    printf("read error: %d", read_error);
 
+  return read_error;
 }
 
 void merge_into_jumprecs(struct dirspec **merge_array)
@@ -521,8 +513,6 @@ int find_match(struct dirspec **merge_array, char *path)
     {
       if (strcmp(merge_array[i]->path, path) == 0)
          return i;
-      else
-        printf("%s != %s\n", merge_array[i]->path, path);
     }
     else
       return i;
@@ -533,13 +523,13 @@ void write_file(FILE *f_handle)
 {
 
   int i;
-  fseek(f_handle, 0, SEEK_SET);
 
   for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
   {
     if (jumprecs[i] != NULL)
     {
        fprintf(f_handle, "%i:%i:%s\n", jumprecs[i]->time, jumprecs[i]->last_accessed, jumprecs[i]->path);
+       printf("%i:%i:%s\n", jumprecs[i]->time, jumprecs[i]->last_accessed, jumprecs[i]->path);
     }
   }
 
@@ -548,6 +538,6 @@ void write_file(FILE *f_handle)
 void autojump_exit()
 {
   //force save.
-  last_sync = 0;
+  last_sync = AUTOJUMP_SYNC_TIME_SECONDS + 25;
   sync_to_file();
 }
