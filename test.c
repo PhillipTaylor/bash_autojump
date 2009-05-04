@@ -12,9 +12,11 @@ int main()
   autojump_init();
 
   autojump_jumpstat();
+  printf("-------\n");
 
   autojump_directory_changed("/usr");
   autojump_directory_changed("/home");
+  sleep(5);
   autojump_directory_changed("/bin");
 
   autojump_jumpstat();

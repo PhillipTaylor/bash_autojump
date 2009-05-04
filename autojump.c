@@ -304,20 +304,28 @@ void sync_to_file()
   if ((now - last_sync) < AUTOJUMP_SYNC_TIME_SECONDS)
     return;
 
+  printf("sync to file\n");
+
   temp = getenv("HOME");
   strcpy(filename, temp);
   strcat(filename, AUTOJUMP_FILENAME);
 
   //open for reading and writing
-  f_handle = fopen(filename, "r");
+  f_handle = fopen(filename, "r+");
   if (f_handle == NULL)
-    read_failed = 1;
+  {
+    printf("Read failed\n");
+    srand(time(NULL));
+    last_sync += (rand() % 3600);
+    fclose(f_handle);
+    return; 
+  }
   else
   {
-    if (lock_file(f_handle) == -1)
+    if (0)//lock_file(f_handle) == -1)
     {
       srand(time(NULL));
-      last_sync += (rand() % 10);
+      last_sync += (rand() % 3600);
       fclose(f_handle);
       return; 
     }
@@ -334,13 +342,12 @@ void sync_to_file()
       if (i == 0)
         merge_into_jumprecs(merge_array);
 
-      fclose(f_handle);
-      f_handle = fopen(filename, "w");
       write_file(f_handle);
-      unlock_file(f_handle);
+      //unlock_file(f_handle);
+      fclose(f_handle);
+      last_sync = now;
     }
   }
-
 }
 
 int lock_file(FILE *f_handle)
@@ -523,6 +530,8 @@ void write_file(FILE *f_handle)
 {
 
   int i;
+
+  rewind(f_handle);
 
   for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
   {
