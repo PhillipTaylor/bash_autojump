@@ -330,7 +330,7 @@ void sync_to_file()
   }
   else
   {
-    if (0)//lock_file(f_handle) == -1)
+    if (lock_file(f_handle) == -1)
     {
       srand(time(NULL));
       last_sync += (rand() % 3600);
@@ -351,7 +351,7 @@ void sync_to_file()
         merge_into_jumprecs(merge_array);
 
       write_file(f_handle);
-      //unlock_file(f_handle);
+      unlock_file(f_handle);
       fclose(f_handle);
       last_sync = now;
     }
