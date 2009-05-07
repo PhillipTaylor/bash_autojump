@@ -325,6 +325,9 @@ void sync_to_file()
   {
     srand(time(NULL));
     last_sync += (rand() % 3600);
+
+    //file doesn't exist, create.
+    f_handle = fopen(filename, "w");
     fclose(f_handle);
     return; 
   }
