@@ -122,6 +122,16 @@ void autojump_directory_changed(char *new_path)
   //sync if need be.
   sync_to_file();
 
+  //first attempt
+  if (current_directory == NULL)
+  {
+     current_directory = new_path;
+     current_directory = (char*) malloc ((sizeof(char) * strlen(new_path)) + 1);
+     strcpy(current_directory, new_path);
+     entered = now;
+     return;
+  }
+
   now = time(NULL);
 
   //update the score for the directory we just left.
@@ -288,6 +298,7 @@ void autojump_jumpstat()
  * 3: strtol fail - wax file
 */
 
+//TODO: better recovery from error.
 void sync_to_file()
 {
   int now;
@@ -304,8 +315,6 @@ void sync_to_file()
   if ((now - last_sync) < AUTOJUMP_SYNC_TIME_SECONDS)
     return;
 
-  printf("sync to file\n");
-
   temp = getenv("HOME");
   strcpy(filename, temp);
   strcat(filename, AUTOJUMP_FILENAME);
@@ -314,7 +323,6 @@ void sync_to_file()
   f_handle = fopen(filename, "r+");
   if (f_handle == NULL)
   {
-    printf("Read failed\n");
     srand(time(NULL));
     last_sync += (rand() % 3600);
     fclose(f_handle);
@@ -385,7 +393,6 @@ int load_file(FILE *f_handle, struct dirspec **merge_array)
   int lines_read = 0;
   int read_error = 0;
   int next_free = 0;
-  struct dirspec *rec;
   char *delim_one, *delim_two;
   int i;
 
@@ -426,12 +433,10 @@ int load_file(FILE *f_handle, struct dirspec **merge_array)
     strcpy(temp, delim_two + 1);
 
     //read a whole line succesfully, add it to the array
-    rec = (struct dirspec*) (merge_array + next_free);
-    rec = (struct dirspec*) malloc (sizeof(struct dirspec));
-    rec->path = temp;
-    rec->time = total_time;
-    rec->last_accessed = last_accessed;
-    printf("%d, %d, %s\n", rec->time, rec->last_accessed, rec->path);
+    merge_array[next_free] = (struct dirspec*) malloc (sizeof(struct dirspec));
+    merge_array[next_free]->path = temp;
+    merge_array[next_free]->time = total_time;
+    merge_array[next_free]->last_accessed = last_accessed;
 
     next_free++;
 
@@ -447,7 +452,7 @@ int load_file(FILE *f_handle, struct dirspec **merge_array)
   free(buffer);
 
   if (read_error != 0)
-    printf("read error: %d", read_error);
+    printf("read error: %d\n(If this doesn't fix itself, try manually fixing ~/.autojump", read_error);
 
   return read_error;
 }
@@ -456,7 +461,7 @@ void merge_into_jumprecs(struct dirspec **merge_array)
 {
   int i, put;
 
-   //step 1, take data from jumprecs to merge array
+  //step 1, take data from jumprecs to merge array
   for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
   {
 
@@ -538,7 +543,6 @@ void write_file(FILE *f_handle)
     if (jumprecs[i] != NULL)
     {
        fprintf(f_handle, "%i:%i:%s\n", jumprecs[i]->time, jumprecs[i]->last_accessed, jumprecs[i]->path);
-       printf("%i:%i:%s\n", jumprecs[i]->time, jumprecs[i]->last_accessed, jumprecs[i]->path);
     }
   }
 
