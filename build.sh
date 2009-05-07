@@ -52,5 +52,13 @@ make
 
 popd
 
-echo "To install autojump, go into the bash-4.0 folder and type 'make install'"
+echo "*****************************************************************"
+echo "**  To run and test you new shell the bash executable is in    **"
+echo "**  the bash-4.0 folder. To install your new shell go into the **"
+echo "**  bash_4.0 folder and run 'make install'                     **"
+echo "**                                                             **"
+echo "**           I hope you enjoying using this patch.             **"
+echo "**                 Phillip Taylor B.Sc. HONS.                  **"
+echo "*****************************************************************"
+echo ""
 echo "script finished"
