@@ -125,7 +125,6 @@ void autojump_directory_changed(char *new_path)
   //first attempt
   if (current_directory == NULL)
   {
-     current_directory = new_path;
      current_directory = (char*) malloc ((sizeof(char) * strlen(new_path)) + 1);
      strcpy(current_directory, new_path);
      entered = now;
