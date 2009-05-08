@@ -28,7 +28,6 @@ fi
 echo "untaring new bash-4.0 folder"
 tar -xf "bash-4.0.tar.gz"
 
-`bash-4.0/configure --help`
 echo -n "Enter ./configure options for bash: (default=blank): "
 read CONFIG_OPTIONS
 
