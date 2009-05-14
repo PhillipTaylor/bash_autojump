@@ -1,0 +1,22 @@
+--- /tmp/bj/bash-4.0/builtins/exit.def	2009-01-04 19:32:22.000000000 +0000
++++ bash-4.0/builtins/exit.def	2009-05-14 22:04:29.000000000 +0100
+@@ -46,6 +46,10 @@
+ #include "common.h"
+ #include "builtext.h"	/* for jobs_builtin */
+ 
++#if defined (AJUMP_DEF)
++  #include "ajump.def"
++#endif
++
+ extern int check_jobs_at_exit;
+ extern int last_command_exit_value;
+ extern int running_trap, trap_saved_exit_value;
+@@ -66,6 +70,8 @@
+       fflush (stderr);
+     }
+ 
++  ajump_exit();
++
+   return (exit_or_logout (list));
+ }
+ 

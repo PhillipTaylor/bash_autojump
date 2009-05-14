@@ -41,8 +41,12 @@ popd
 echo "patching builtins/common.c"
 patch bash-4.0/builtins/common.c common.c.patch
 
+echo "patching builtins/exit.def"
+patch bash-4.0/builtins/exit.def exit.def.patch
+
 echo "patching builtins/Makefile.in"
 patch bash-4.0/builtins/Makefile.in Makefile.in.patch
+
 
 pushd "bash-4.0"
 
