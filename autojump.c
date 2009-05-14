@@ -228,22 +228,27 @@ char *autojump_jump(char *criteria)
 
   if (criteria == NULL && last_criteria == NULL)
     return;
+  else if (criteria != NULL && last_criteria != NULL)
+  {
+    free(last_criteria);
+    last_criteria = (char*) malloc ((sizeof(char) * strlen(criteria)) + 1);
+    strcpy(last_criteria, criteria);
+  }
   else if (criteria == NULL && last_criteria != NULL)
+  {
     criteria = last_criteria;
-
-
-  if (last_criteria != NULL)
-      free(last_criteria);
-
-  last_criteria = (char*) malloc ((sizeof(char) * strlen(criteria)) + 1);
-  strcpy(last_criteria, criteria);
+    printf("criteria: %s\n", criteria);
+  }
 
   if (regcomp(&pattern, criteria, REG_EXTENDED|REG_NOSUB|REG_ICASE) != 0)
   {
     printf("bad regex specification\n");
-    free(last_criteria);
-    last_criteria = NULL;
-    return;
+    if (last_criteria != NULL)
+    {
+      free(last_criteria);
+      last_criteria = NULL;
+      return NULL;
+    }
   }
 
   for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)

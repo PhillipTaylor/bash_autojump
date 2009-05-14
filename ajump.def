@@ -99,9 +99,14 @@ j_builtin (list)
      WORD_LIST *list;
 {
   char *switch_to;
-  char *temp;
+  char *input;
 
-  switch_to = autojump_jump(list->word->word);
+  if (list == NULL)
+    input = NULL;
+  else
+    input = list->word->word;
+
+  switch_to = autojump_jump(input);
 
   if (switch_to != NULL)
   {
