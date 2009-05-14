@@ -8,6 +8,7 @@
 #include <time.h>
 #include <sys/file.h>
 #include <errno.h>
+#include <regex.h>
 
 #include "autojump.h"
 
@@ -223,6 +224,7 @@ char *autojump_jump(char *criteria)
   int i;
   int match;
   int best_match = -1;
+  regex_t pattern;
 
   if (criteria == NULL && last_criteria == NULL)
     return;
@@ -236,16 +238,24 @@ char *autojump_jump(char *criteria)
   last_criteria = (char*) malloc ((sizeof(char) * strlen(criteria)) + 1);
   strcpy(last_criteria, criteria);
 
+  if (regcomp(&pattern, criteria, REG_EXTENDED|REG_NOSUB|REG_ICASE) != 0)
+  {
+    printf("bad regex specification\n");
+    free(last_criteria);
+    last_criteria = NULL;
+    return;
+  }
+
   for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
   {
     if (jumprecs[i] != NULL)
     {
-       //don't jump to the current directory, use the second best instead.
+       //ignore the directory you're in, you obviously don't want to jump there.
        if (strcmp(jumprecs[i]->path, current_directory) != 0)
        {
          //match each record, if it is a match, mark it if it has the
          //best score.
-         if (strstr(jumprecs[i]->path, criteria) != NULL)
+         if (regexec(&pattern, jumprecs[i]->path, (size_t)0, NULL, 0) == 0)
          {
            if (best_match == -1)
               best_match = i;
