@@ -454,7 +454,7 @@ int load_file(FILE *f_handle, struct dirspec **merge_array)
   free(buffer);
 
   if (read_error != 0)
-    printf("read error: %d\n(If this doesn't fix itself, try manually fixing ~/.autojump", read_error);
+    printf("AJ read error: %d\n", read_error);
 
   return read_error;
 }
