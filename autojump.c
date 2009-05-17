@@ -75,6 +75,8 @@ unsigned int entered;
 //array with the disk.
 unsigned int last_sync;
 
+int autojump_initialised = 0;
+
 void autojump_init()
 {
   int i;
@@ -87,6 +89,8 @@ void autojump_init()
   current_directory = NULL;
 
   sync_to_file();
+
+  autojump_initialised = 1;
 }
 
 
@@ -120,35 +124,33 @@ void autojump_directory_changed(char *new_path)
 
   char *path;
 
+  if (autojump_initialised == 0)
+    autojump_init();
+
   //sync if need be.
   sync_to_file();
-
-  //first attempt
-  if (current_directory == NULL)
-  {
-     current_directory = (char*) malloc ((sizeof(char) * strlen(new_path)) + 1);
-     strcpy(current_directory, new_path);
-     entered = now;
-     return;
-  }
 
   now = time(NULL);
 
   //update the score for the directory we just left.
-  for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
+  if (current_directory != NULL)
   {
-    if (jumprecs[i] != NULL)
+    for (i = 0; i < AUTOJUMP_DIR_SIZE; i++)
     {
-      if (strcmp(jumprecs[i]->path, current_directory) == 0)
+      if (jumprecs[i] != NULL)
       {
-        jumprecs[i]->time += (now - entered);
-        jumprecs[i]->last_accessed = now;
+        if (strcmp(jumprecs[i]->path, current_directory) == 0)
+        {
+          jumprecs[i]->time += (now - entered);
+          jumprecs[i]->last_accessed = now;
+        }
       }
     }
+
+    free(current_directory);
   }
 
   //note that we are now in a new directory
-  free(current_directory);
   current_directory = (char*) malloc ((sizeof(char) * strlen(new_path)) + 1);
   strcpy(current_directory, new_path);
   entered = now;

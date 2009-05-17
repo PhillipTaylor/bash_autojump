@@ -88,8 +88,6 @@ $END
 extern int errno;
 #endif /* !errno */
 
-static int initialised = 0;
-
 static int cd_to_string __P((char *));
 void directory_changed(char *new_directory);
 void ajump_exit();
@@ -130,11 +128,6 @@ jumpstat_builtin (list)
 void
 directory_changed(char *new_directory)
 {
-  if (initialised == 0)
-  {
-    autojump_init();
-    initialised = 1;
-  }
   autojump_directory_changed(new_directory);
 }
 
