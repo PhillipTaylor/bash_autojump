@@ -384,7 +384,7 @@ int lock_file(FILE *f_handle)
   fl.l_type   = F_WRLCK;
   fl.l_whence = SEEK_SET;
   fl.l_start  = 0;
-  fl.l_len    = 0;
+  fl.l_len    = 1;
   fl.l_pid    = getpid();
 
   return fcntl(fileno(f_handle), F_SETLK, &fl);
@@ -397,7 +397,7 @@ int unlock_file(FILE *f_handle)
   fl.l_type   = F_UNLCK;
   fl.l_whence = SEEK_SET;
   fl.l_start  = 0;
-  fl.l_len    = 0;
+  fl.l_len    = 1;
   fl.l_pid    = getpid();
 
   return fcntl(fileno(f_handle), F_SETLK, &fl);
